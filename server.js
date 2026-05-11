@@ -39,13 +39,13 @@ app.get('/', (req, res) => {
 // Probar conexión a la base de datos al iniciar
 const { getConnection } = require('./config/database');
 
-// Solo conectar si estamos en producción o si tenemos credenciales
-if (process.env.NODE_ENV === 'production' || (process.env.DB_SERVER && process.env.DB_SERVER !== 'DESKTOP-KUQNDNJ')) {
-    getConnection().then(() => {
-        console.log('✅ Conexión a BD verificada al iniciar');
+// Solo conectar si estamos en producción
+if (process.env.NODE_ENV === 'production') {
+    const pool = getConnection();
+    pool.connect().then(() => {
+        console.log('✅ Conexión a PostgreSQL verificada al iniciar');
     }).catch(err => {
-        console.error('❌ Error al conectar a BD:', err.message);
-        // No detener el servidor, solo loguear el error
+        console.error('❌ Error al conectar a PostgreSQL:', err.message);
     });
 } else {
     console.log('⚠️ Modo desarrollo: No se verifica conexión a BD remota');
