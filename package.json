@@ -2,7 +2,7 @@
   "name": "api-arboles",
   "version": "1.0.0",
   "scripts": {
-    "start": "node server.js",
+    "start": "node --omit=dev server.js",
     "dev": "nodemon server.js"
   },
   "dependencies": {
