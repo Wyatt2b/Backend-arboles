@@ -1,7 +1,5 @@
 const { getConnection } = require('../config/database');
 
-
-
 // GET: Obtener todos los administrativos (NUEVO)
 exports.getAllAdministrativos = async (req, res) => {
     try {

@@ -56,16 +56,18 @@ exports.registerAlumno = async (req, res) => {
 exports.registerAdmin = async (req, res) => {
     try {
         const {
-            primer_nombre,
-            segundo_nombre,
-            apellido_paterno,
-            apellido_materno,
-            nombre_completo,
-            correo,
-            contrasena,
-            es_admin,
-            ficha_inicio,
-            ficha_fin
+        primer_nombre,
+        segundo_nombre,
+        apellido_paterno,
+        apellido_materno,
+        nombre_completo,
+        correo,
+        contrasena,
+        es_admin,
+        ficha_inicio,
+        ficha_fin,
+        telefono,        // nuevo
+        fecha_nacimiento  // nuevo
         } = req.body;
 
         const pool = await getConnection();
