@@ -13,14 +13,22 @@ const verifyToken = async (req, res, next) => {
         
         const pool = await getConnection();
         
-        // Verificar si es admin en la tabla Administrativa
-        const adminResult = await pool.query(
-            'SELECT * FROM administrativa WHERE id = $1 AND esta_activo = true',
+        // Buscar en usuario y verificar si es admin
+        const userResult = await pool.query(
+            `SELECT u.*, 
+                    CASE WHEN a.id_usuario IS NOT NULL THEN true ELSE false END as es_admin
+             FROM usuario u
+             LEFT JOIN administrativa a ON u.id_usuario = a.id_usuario
+             WHERE u.id_usuario = $1 AND u.esta_activo = true`,
             [decoded.id]
         );
         
+        if (userResult.rows.length === 0) {
+            return res.status(401).json({ message: 'User not found' });
+        }
+        
         req.userId = decoded.id;
-        req.isAdmin = adminResult.rows.length > 0;
+        req.isAdmin = userResult.rows[0].es_admin === true;
         
         next();
     } catch (error) {

@@ -1,5 +1,29 @@
 const { getConnection } = require('../config/database');
 
+
+
+// GET: Obtener todos los administrativos (NUEVO)
+exports.getAllAdministrativos = async (req, res) => {
+    try {
+        const pool = await getConnection();
+
+        const admins = await pool.query(`
+            SELECT u.id_usuario, u.nombre_completo, u.correo, u.telefono,
+                   u.fecha_registro, u.esta_activo,
+                   ad.ficha_inicio, ad.ficha_fin, ad.es_admin, ad.ultima_conexion
+            FROM usuario u
+            INNER JOIN administrativa ad ON u.id_usuario = ad.id_usuario
+            WHERE u.tipo_usuario = 'admin'
+            ORDER BY u.fecha_registro DESC
+        `);
+        
+        res.json(admins.rows);
+    } catch (error) {
+        console.error('Error en getAllAdministrativos:', error);
+        res.status(500).json({ message: 'Error al obtener administradores', error: error.message });
+    }
+};
+
 // GET: Obtener todas las gestiones/escuelas
 exports.getAllGestiones = async (req, res) => {
     try {
@@ -287,17 +311,17 @@ exports.getAllAlumnos = async (req, res) => {
             SELECT u.id_usuario, u.primer_nombre, u.segundo_nombre, 
                    u.apellido_paterno, u.apellido_materno, u.correo, u.telefono,
                    u.fecha_registro, u.fecha_nacimiento, u.esta_activo,
-                   g.id as id_gestion, g.nombre_escuela,
-                   COUNT(DISTINCT a.id_arbol) as total_arboles_gestion
+                   a.id_gestion, g.nombre_escuela,
+                   COUNT(DISTINCT ar.id_arbol) as total_arboles_gestion
             FROM usuario u
-            JOIN alumno al ON u.id_usuario = al.id_usuario
-            JOIN gestion g ON al.id_gestion = g.id
-            LEFT JOIN arbol a ON g.id = a.id_gestion
-            WHERE u.esta_activo = true
+            INNER JOIN alumno a ON u.id_usuario = a.id_usuario
+            INNER JOIN gestion g ON a.id_gestion = g.id
+            LEFT JOIN arbol ar ON g.id = ar.id_gestion
+            WHERE u.tipo_usuario = 'alumno' AND u.esta_activo = true
             GROUP BY u.id_usuario, u.primer_nombre, u.segundo_nombre, 
                      u.apellido_paterno, u.apellido_materno, u.correo, u.telefono,
                      u.fecha_registro, u.fecha_nacimiento, u.esta_activo, 
-                     g.id, g.nombre_escuela
+                     a.id_gestion, g.nombre_escuela
             ORDER BY u.primer_nombre
         `);
         

@@ -23,7 +23,16 @@ router.get('/alumnos', adminController.getAllAlumnos);
 router.post('/asignar-alumno', adminController.asignarAlumnoAGestion);
 router.delete('/desasignar-alumno/:id_usuario/:id_gestion', adminController.desasignarAlumnoDeGestion);
 
+// Administrativos (NUEVA RUTA)
+router.get('/administrativos', adminController.getAllAdministrativos);
+
 // Estadísticas
 router.get('/estadisticas', adminController.getEstadisticas);
+
+// Especies (si ya las tienes)
+router.get('/especies', adminController.getAllEspecies);
+router.post('/especies', adminController.createEspecie);
+router.put('/especies/:id', adminController.updateEspecie);
+router.delete('/especies/:id', adminController.deleteEspecie);
 
 module.exports = router;
