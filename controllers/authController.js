@@ -56,18 +56,18 @@ exports.registerAlumno = async (req, res) => {
 exports.registerAdmin = async (req, res) => {
     try {
         const {
-        primer_nombre,
-        segundo_nombre,
-        apellido_paterno,
-        apellido_materno,
-        nombre_completo,
-        correo,
-        contrasena,
-        es_admin,
-        ficha_inicio,
-        ficha_fin,
-        telefono,        // nuevo
-        fecha_nacimiento  // nuevo
+            primer_nombre,
+            segundo_nombre,
+            apellido_paterno,
+            apellido_materno,
+            nombre_completo,
+            correo,
+            contrasena,
+            es_admin,
+            ficha_inicio,
+            ficha_fin,
+            telefono,
+            fecha_nacimiento
         } = req.body;
 
         const pool = await getConnection();
@@ -85,16 +85,17 @@ exports.registerAdmin = async (req, res) => {
         // Encriptar contraseña
         const hashedPassword = await bcrypt.hash(contrasena, 10);
 
-        // Insertar en usuario con todos los campos
+        // Insertar en usuario con TODOS los campos, incluyendo telefono y fecha_nacimiento
         const userResult = await pool.query(
             `INSERT INTO usuario 
             (primer_nombre, segundo_nombre, apellido_paterno, apellido_materno,
              nombre_completo, correo, contrasena, tipo_usuario, es_admin, 
-             fecha_registro, esta_activo) 
-            VALUES ($1, $2, $3, $4, $5, $6, $7, 'admin', $8, CURRENT_DATE, true)
+             telefono, fecha_nacimiento, fecha_registro, esta_activo) 
+            VALUES ($1, $2, $3, $4, $5, $6, $7, 'admin', $8, $9, $10, CURRENT_DATE, true)
             RETURNING id_usuario`,
             [primer_nombre, segundo_nombre, apellido_paterno, apellido_materno,
-             nombre_completo, correo, hashedPassword, es_admin || true]
+             nombre_completo, correo, hashedPassword, es_admin || true,
+             telefono || null, fecha_nacimiento || null]
         );
 
         const id_usuario = userResult.rows[0].id_usuario;
