@@ -1,5 +1,103 @@
 const { getConnection } = require('../config/database');
 
+// GET: Obtener árboles de una gestión (escuela)
+exports.getArbolesPorGestion = async (req, res) => {
+    try {
+        const { id_gestion } = req.params;
+        const pool = await getConnection();
+
+        const arboles = await pool.query(`
+            SELECT a.id_arbol, e.nombre_comun, e.nombre_cientifico,
+                   a.fecha_plantado, a.vive
+            FROM arbol a
+            JOIN especie e ON a.id_especie = e.id
+            WHERE a.id_gestion = $1 AND a.vive = true
+            ORDER BY a.id_arbol
+        `, [id_gestion]);
+        
+        res.json(arboles.rows);
+    } catch (error) {
+        console.error('Error en getArbolesPorGestion:', error);
+        res.status(500).json({ message: 'Error al obtener árboles', error: error.message });
+    }
+};
+
+// GET: Obtener árboles asignados a un alumno
+exports.getArbolesAsignados = async (req, res) => {
+    try {
+        const { id_usuario } = req.params;
+        const pool = await getConnection();
+
+        const arboles = await pool.query(`
+            SELECT aa.id_arbol, aa.fecha_inicio, aa.fecha_fin,
+                   e.nombre_comun, e.nombre_cientifico,
+                   g.nombre_escuela
+            FROM alumno_arbol aa
+            JOIN arbol a ON aa.id_arbol = a.id_arbol
+            JOIN especie e ON a.id_especie = e.id
+            JOIN gestion g ON a.id_gestion = g.id
+            WHERE aa.id_usuario = $1
+            ORDER BY aa.fecha_inicio DESC
+        `, [id_usuario]);
+        
+        res.json(arboles.rows);
+    } catch (error) {
+        console.error('Error en getArbolesAsignados:', error);
+        res.status(500).json({ message: 'Error al obtener árboles asignados', error: error.message });
+    }
+};
+
+// POST: Asignar árbol a alumno
+exports.asignarArbolAlumno = async (req, res) => {
+    try {
+        const { id_usuario, id_arbol, fecha_inicio, fecha_fin } = req.body;
+        const pool = await getConnection();
+
+        // Verificar si ya está asignado
+        const existe = await pool.query(
+            'SELECT * FROM alumno_arbol WHERE id_usuario = $1 AND id_arbol = $2 AND fecha_fin IS NULL',
+            [id_usuario, id_arbol]
+        );
+
+        if (existe.rows.length > 0) {
+            return res.status(400).json({ message: 'El alumno ya tiene este árbol asignado' });
+        }
+
+        await pool.query(
+            `INSERT INTO alumno_arbol (id_usuario, id_arbol, fecha_inicio, fecha_fin) 
+             VALUES ($1, $2, $3, $4)`,
+            [id_usuario, id_arbol, fecha_inicio || new Date(), fecha_fin || null]
+        );
+
+        res.status(201).json({ message: 'Árbol asignado al alumno exitosamente' });
+    } catch (error) {
+        console.error('Error en asignarArbolAlumno:', error);
+        res.status(500).json({ message: 'Error al asignar árbol', error: error.message });
+    }
+};
+
+// DELETE: Desasignar árbol de alumno
+exports.desasignarArbolAlumno = async (req, res) => {
+    try {
+        const { id_usuario, id_arbol } = req.params;
+        const pool = await getConnection();
+
+        const result = await pool.query(
+            'UPDATE alumno_arbol SET fecha_fin = CURRENT_DATE WHERE id_usuario = $1 AND id_arbol = $2 AND fecha_fin IS NULL RETURNING *',
+            [id_usuario, id_arbol]
+        );
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: 'Asignación no encontrada' });
+        }
+
+        res.json({ message: 'Árbol desasignado exitosamente' });
+    } catch (error) {
+        console.error('Error en desasignarArbolAlumno:', error);
+        res.status(500).json({ message: 'Error al desasignar árbol', error: error.message });
+    }
+};
+
 // GET: Obtener todos los administrativos (NUEVO)
 exports.getAllAdministrativos = async (req, res) => {
     try {

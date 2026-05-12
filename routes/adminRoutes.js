@@ -29,4 +29,14 @@ router.get('/administrativos', adminController.getAllAdministrativos);
 // Estadísticas
 router.get('/estadisticas', adminController.getEstadisticas);
 
+// Árboles por gestión
+router.get('/gestiones/:id_gestion/arboles', adminController.getArbolesPorGestion);
+
+// Árboles asignados a alumno
+router.get('/alumnos/:id_usuario/arboles', adminController.getArbolesAsignados);
+
+// Asignar/desasignar árboles
+router.post('/alumnos/arboles', adminController.asignarArbolAlumno);
+router.delete('/alumnos/:id_usuario/arboles/:id_arbol', adminController.desasignarArbolAlumno);
+
 module.exports = router;
