@@ -29,10 +29,4 @@ router.get('/administrativos', adminController.getAllAdministrativos);
 // Estadísticas
 router.get('/estadisticas', adminController.getEstadisticas);
 
-// Especies (si ya las tienes)
-router.get('/especies', adminController.getAllEspecies);
-router.post('/especies', adminController.createEspecie);
-router.put('/especies/:id', adminController.updateEspecie);
-router.delete('/especies/:id', adminController.deleteEspecie);
-
 module.exports = router;
