@@ -52,10 +52,14 @@ exports.registerAlumno = async (req, res) => {
     }
 };
 
-// Registro para administrativos (MODIFICADO)
+// Registro para administrativos (CORREGIDO - recibe campos separados)
 exports.registerAdmin = async (req, res) => {
     try {
         const {
+            primer_nombre,
+            segundo_nombre,
+            apellido_paterno,
+            apellido_materno,
             nombre_completo,
             correo,
             contrasena,
@@ -79,18 +83,21 @@ exports.registerAdmin = async (req, res) => {
         // Encriptar contraseña
         const hashedPassword = await bcrypt.hash(contrasena, 10);
 
-        // Insertar en usuario
+        // Insertar en usuario con todos los campos
         const userResult = await pool.query(
             `INSERT INTO usuario 
-            (nombre_completo, correo, contrasena, tipo_usuario, es_admin, fecha_registro, esta_activo) 
-            VALUES ($1, $2, $3, 'admin', $4, CURRENT_DATE, true)
+            (primer_nombre, segundo_nombre, apellido_paterno, apellido_materno,
+             nombre_completo, correo, contrasena, tipo_usuario, es_admin, 
+             fecha_registro, esta_activo) 
+            VALUES ($1, $2, $3, $4, $5, $6, $7, 'admin', $8, CURRENT_DATE, true)
             RETURNING id_usuario`,
-            [nombre_completo, correo, hashedPassword, es_admin || true]
+            [primer_nombre, segundo_nombre, apellido_paterno, apellido_materno,
+             nombre_completo, correo, hashedPassword, es_admin || true]
         );
 
         const id_usuario = userResult.rows[0].id_usuario;
 
-        // Insertar en administrativa usando el MISMO id_usuario
+        // Insertar en administrativa
         await pool.query(
             `INSERT INTO administrativa 
             (id_usuario, ficha_inicio, ficha_fin, es_admin) 
