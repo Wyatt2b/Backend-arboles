@@ -332,16 +332,31 @@ exports.getAllAlumnos = async (req, res) => {
     }
 };
 
-// GET: Obtener estadísticas completas
+// GET: Obtener estadísticas completas (CORREGIDO)
 exports.getEstadisticas = async (req, res) => {
     try {
         const pool = await getConnection();
 
         const totalArboles = await pool.query('SELECT COUNT(*) as total FROM arbol');
         const totalArbolesVivos = await pool.query("SELECT COUNT(*) as total FROM arbol WHERE vive = true");
+        
+        // CORREGIDO: ahora busca en usuario
         const totalUsuarios = await pool.query('SELECT COUNT(*) as total FROM usuario WHERE esta_activo = true');
-        const totalAlumnos = await pool.query('SELECT COUNT(*) as total FROM alumno');
-        const totalAdministrativos = await pool.query('SELECT COUNT(*) as total FROM administrativa WHERE esta_activo = true');
+        const totalAlumnos = await pool.query(`
+            SELECT COUNT(*) as total 
+            FROM usuario u
+            INNER JOIN alumno a ON u.id_usuario = a.id_usuario
+            WHERE u.tipo_usuario = 'alumno' AND u.esta_activo = true
+        `);
+        
+        // CORREGIDO: ahora busca en usuario
+        const totalAdministrativos = await pool.query(`
+            SELECT COUNT(*) as total 
+            FROM usuario u
+            INNER JOIN administrativa ad ON u.id_usuario = ad.id_usuario
+            WHERE u.tipo_usuario = 'admin' AND u.esta_activo = true
+        `);
+        
         const totalGestiones = await pool.query('SELECT COUNT(*) as total FROM gestion');
         const totalCampanias = await pool.query('SELECT COUNT(*) as total FROM campania');
         const totalCuidados = await pool.query('SELECT COUNT(*) as total FROM arbol_cuidados');
