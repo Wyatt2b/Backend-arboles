@@ -2,7 +2,6 @@ const { getConnection } = require('../config/database');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
-// Registro para alumnos - Guarda en usuario Y en alumnos
 exports.registerAlumno = async (req, res) => {
     try {
         const {
@@ -16,9 +15,10 @@ exports.registerAlumno = async (req, res) => {
             telefono
         } = req.body;
 
+        console.log('📝 Registrando alumno:', { correo, primer_nombre, apellido_paterno });
+
         const pool = await getConnection();
 
-        // Verificar si el usuario ya existe
         const existingUser = await pool.query(
             'SELECT * FROM usuario WHERE correo = $1',
             [correo]
@@ -37,11 +37,9 @@ exports.registerAlumno = async (req, res) => {
         ].filter(part => part && part.trim() !== '');
         
         const nombre_completo = nombreCompletoParts.join(' ');
-
-        // Encriptar contraseña
         const hashedPassword = await bcrypt.hash(contrasena, 10);
 
-        // PRIMER INSERT: Tabla USUARIO
+        // INSERT en usuario
         const result = await pool.query(
             `INSERT INTO usuario 
             (primer_nombre, segundo_nombre, apellido_paterno, apellido_materno, 
@@ -54,27 +52,18 @@ exports.registerAlumno = async (req, res) => {
         );
 
         const id_usuario = result.rows[0].id_usuario;
+        console.log('✅ Usuario creado con ID:', id_usuario);
 
-        // SEGUNDO INSERT: Tabla ALUMNOS (solo id_usuario)
-        // Si falla, no detiene el registro
+        // INSERT en alumno (opcional, si falla no detiene el registro)
         try {
-            // Intentar con "alumnos"
-            await pool.query(
-                `INSERT INTO alumnos (id_usuario) VALUES ($1)`,
-                [id_usuario]
-            );
-            console.log(`✅ Alumno insertado en tabla alumnos`);
-        } catch (errorAlumnos) {
+            await pool.query(`INSERT INTO alumnos (id_usuario) VALUES ($1)`, [id_usuario]);
+            console.log('✅ Alumno insertado en tabla alumnos');
+        } catch (err) {
             try {
-                // Intentar con "alumno"
-                await pool.query(
-                    `INSERT INTO alumno (id_usuario) VALUES ($1)`,
-                    [id_usuario]
-                );
-                console.log(`✅ Alumno insertado en tabla alumno`);
-            } catch (errorAlumno) {
-                // Si ambas fallan, solo logueamos el error pero no fallamos el registro
-                console.error('❌ No se pudo insertar en alumno/alumnos:', errorAlumno.message);
+                await pool.query(`INSERT INTO alumno (id_usuario) VALUES ($1)`, [id_usuario]);
+                console.log('✅ Alumno insertado en tabla alumno');
+            } catch (err2) {
+                console.log('⚠️ No se insertó en alumno:', err2.message);
             }
         }
 
@@ -85,12 +74,11 @@ exports.registerAlumno = async (req, res) => {
         });
         
     } catch (error) {
-        console.error('Error en registerAlumno:', error);
+        console.error('❌ Error en registerAlumno:', error);
         res.status(500).json({ message: 'Error en el servidor', error: error.message });
     }
 };
 
-// Registro para administrativos
 exports.registerAdmin = async (req, res) => {
     try {
         const {
@@ -159,12 +147,11 @@ exports.registerAdmin = async (req, res) => {
     }
 };
 
-// Login unificado - CORREGIDO
 exports.login = async (req, res) => {
     try {
         const { correo, contrasena } = req.body;
         
-        console.log('🔐 Intento de login con:', { correo });
+        console.log('🔐 Login intentado para:', correo);
         
         const pool = await getConnection();
 
@@ -177,28 +164,21 @@ exports.login = async (req, res) => {
             [correo]
         );
 
-        console.log('📊 Resultado de búsqueda:', { 
-            encontrado: result.rows.length > 0,
-            id: result.rows[0]?.id_usuario 
-        });
-
         if (result.rows.length === 0) {
+            console.log('❌ Usuario no encontrado:', correo);
             return res.status(401).json({ message: 'Credenciales inválidas' });
         }
 
         const usuario = result.rows[0];
         const isAdmin = usuario.es_admin === true;
 
-        // Verificar contraseña
         const validPassword = await bcrypt.compare(contrasena, usuario.contrasena);
         
-        console.log('🔑 Validación contraseña:', { valida: validPassword });
-
         if (!validPassword) {
+            console.log('❌ Contraseña incorrecta para:', correo);
             return res.status(401).json({ message: 'Credenciales inválidas' });
         }
 
-        // Actualizar última conexión si es admin
         if (isAdmin) {
             await pool.query(
                 'UPDATE administrativa SET ultima_conexion = CURRENT_TIMESTAMP WHERE id_usuario = $1',
@@ -206,7 +186,6 @@ exports.login = async (req, res) => {
             );
         }
 
-        // Generar token
         const token = jwt.sign(
             { 
                 id: usuario.id_usuario,
@@ -218,7 +197,6 @@ exports.login = async (req, res) => {
             { expiresIn: '24h' }
         );
 
-        // Preparar respuesta - manejando nulls
         let userResponse = {
             id: usuario.id_usuario,
             correo: usuario.correo,
