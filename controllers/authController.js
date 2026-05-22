@@ -2,7 +2,7 @@ const { getConnection } = require('../config/database');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
-// Registro para usuarios normales (Alumno)
+// Registro para usuarios normales (Alumno) - CORREGIDO
 exports.registerAlumno = async (req, res) => {
     try {
         const {
@@ -28,23 +28,61 @@ exports.registerAlumno = async (req, res) => {
             return res.status(400).json({ message: 'El correo ya está registrado' });
         }
 
+        // ============================================
+        // GENERAR NOMBRE_COMPLETO (concatenando los campos)
+        // ============================================
+        const nombreCompletoParts = [
+            primer_nombre,
+            segundo_nombre,
+            apellido_paterno,
+            apellido_materno
+        ].filter(part => part && part.trim() !== '');
+        
+        const nombre_completo = nombreCompletoParts.join(' ');
+
         // Encriptar contraseña
         const hashedPassword = await bcrypt.hash(contrasena, 10);
 
-        // Insertar usuario
+        // Insertar usuario (AHORA CON NOMBRE_COMPLETO)
         const result = await pool.query(
             `INSERT INTO usuario 
             (primer_nombre, segundo_nombre, apellido_paterno, apellido_materno, 
-             correo, contrasena, fecha_registro, fecha_nacimiento, telefono, esta_activo, tipo_usuario) 
-            VALUES ($1, $2, $3, $4, $5, $6, CURRENT_DATE, $7, $8, true, 'alumno')
+             correo, contrasena, fecha_registro, fecha_nacimiento, telefono, 
+             esta_activo, tipo_usuario, nombre_completo) 
+            VALUES ($1, $2, $3, $4, $5, $6, CURRENT_DATE, $7, $8, true, 'alumno', $9)
             RETURNING id_usuario`,
             [primer_nombre, segundo_nombre, apellido_paterno, apellido_materno,
-             correo, hashedPassword, fecha_nacimiento, telefono]
+             correo, hashedPassword, fecha_nacimiento || null, telefono || null, nombre_completo]
         );
+
+        const id_usuario = result.rows[0].id_usuario;
+
+        // ============================================
+        // INSERTAR EN TABLA ALUMNO (¡ESTO ES CRÍTICO!)
+        // ============================================
+        // Intenta primero con "alumnos" (plural), si falla usa "alumno" (singular)
+        try {
+            await pool.query(
+                `INSERT INTO alumnos (id_usuario, id_gestion) 
+                 VALUES ($1, $1)`,
+                [id_usuario]
+            );
+            console.log(`✅ Alumno insertado en tabla alumnos con id_usuario: ${id_usuario}`);
+        } catch (insertError) {
+            // Si falla con "alumnos", intentar con "alumno"
+            console.log('Intentando con tabla alumno...');
+            await pool.query(
+                `INSERT INTO alumno (id_usuario, id_gestion) 
+                 VALUES ($1, $1)`,
+                [id_usuario]
+            );
+            console.log(`✅ Alumno insertado en tabla alumno con id_usuario: ${id_usuario}`);
+        }
 
         res.status(201).json({
             message: 'Usuario registrado exitosamente',
-            id: result.rows[0].id_usuario
+            id: id_usuario,
+            nombre_completo: nombre_completo
         });
     } catch (error) {
         console.error('Error en registerAlumno:', error);
