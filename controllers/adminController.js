@@ -229,7 +229,7 @@ exports.createCampania = async (req, res) => {
     }
 };
 
-// GET: Obtener todos los árboles (admin)
+// GET: Obtener todos los árboles
 exports.getAllArboles = async (req, res) => {
     try {
         const pool = await getConnection();
@@ -237,24 +237,16 @@ exports.getAllArboles = async (req, res) => {
         const arboles = await pool.query(`
             SELECT a.id_arbol, a.fecha_plantado, a.vive, a.notas, a.comentario,
                    a.fecha_registro, a.id_gestion, a.id_especie,
+                   a.url_imagen, a.imagen_descripcion,
                    e.nombre_comun, e.nombre_cientifico,
                    u.calle, u.colonia, u.numero, u.estado, u.coordenadas,
                    v.altura_actual, v.diametro_actual, v.estado_actual,
-                   g.nombre_escuela,
-                   STRING_AGG(CONCAT(us.primer_nombre, ' ', us.apellido_paterno), ', ') as alumnos_asignados
+                   g.nombre_escuela
             FROM arbol a
             JOIN especie e ON a.id_especie = e.id
             JOIN gestion g ON a.id_gestion = g.id
             LEFT JOIN ubicacion u ON a.id_arbol = u.id_arbol
             LEFT JOIN valor v ON a.id_arbol = v.id_arbol AND v.esta_activo = true
-            LEFT JOIN alumno al ON g.id = al.id_gestion
-            LEFT JOIN usuario us ON al.id_usuario = us.id_usuario
-            GROUP BY a.id_arbol, a.fecha_plantado, a.vive, a.id_especie, a.notas,
-                     a.fecha_registro, a.comentario, a.id_gestion,
-                     e.nombre_comun, e.nombre_cientifico,
-                     u.calle, u.colonia, u.numero, u.estado, u.coordenadas, u.id_ubicacion,
-                     v.altura_actual, v.diametro_actual, v.estado_actual,
-                     g.nombre_escuela
             ORDER BY a.id_arbol DESC
         `);
         
@@ -265,7 +257,7 @@ exports.getAllArboles = async (req, res) => {
     }
 };
 
-// POST: Crear nuevo árbol (admin)
+// POST: Crear nuevo árbol (admin) - CON IMAGEN
 exports.createArbol = async (req, res) => {
     try {
         const {
@@ -276,32 +268,35 @@ exports.createArbol = async (req, res) => {
             notas,
             comentario,
             ubicacion,
-            valor_inicial
+            valor_inicial,
+            url_imagen,
+            imagen_descripcion
         } = req.body;
 
         const pool = await getConnection();
 
-        // Insertar árbol
         const arbolResult = await pool.query(
             `INSERT INTO arbol 
-            (id_gestion, id_especie, fecha_plantado, vive, notas, comentario, fecha_registro) 
-            VALUES ($1, $2, $3, $4, $5, $6, CURRENT_DATE)
+            (id_gestion, id_especie, fecha_plantado, vive, notas, comentario, 
+             fecha_registro, url_imagen, imagen_descripcion) 
+            VALUES ($1, $2, $3, $4, $5, $6, CURRENT_DATE, $7, $8)
             RETURNING id_arbol`,
-            [id_gestion, id_especie, fecha_plantado || new Date(), vive !== undefined ? vive : true, notas, comentario]
+            [id_gestion, id_especie, fecha_plantado || new Date(), 
+             vive !== undefined ? vive : true, notas, comentario,
+             url_imagen || null, imagen_descripcion || null]
         );
 
         const id_arbol = arbolResult.rows[0].id_arbol;
 
-        // Insertar ubicación si se proporciona
         if (ubicacion) {
             await pool.query(
                 `INSERT INTO ubicacion (id_arbol, coordenadas, calle, colonia, numero, estado) 
                 VALUES ($1, $2, $3, $4, $5, $6)`,
-                [id_arbol, ubicacion.coordenadas, ubicacion.calle, ubicacion.colonia, ubicacion.numero, ubicacion.estado]
+                [id_arbol, ubicacion.coordenadas, ubicacion.calle, 
+                 ubicacion.colonia, ubicacion.numero, ubicacion.estado]
             );
         }
 
-        // Insertar valor inicial si se proporciona
         if (valor_inicial) {
             await pool.query(
                 `INSERT INTO valor 
@@ -309,7 +304,8 @@ exports.createArbol = async (req, res) => {
                  fecha_plantacion, fecha_registro, esta_activo)
                 VALUES ($1, $2, $3, $4, $5, $6, CURRENT_DATE, true)`,
                 [id_arbol, valor_inicial.altura_actual, valor_inicial.diametro_actual, 
-                 valor_inicial.estado_actual, valor_inicial.ubicacion, valor_inicial.fecha_plantacion || fecha_plantado]
+                 valor_inicial.estado_actual, valor_inicial.ubicacion, 
+                 valor_inicial.fecha_plantacion || fecha_plantado]
             );
         }
 
