@@ -2,6 +2,7 @@ const { getConnection } = require('../config/database');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
+// REGISTRO - guarda correo en minúsculas
 exports.registerAlumno = async (req, res) => {
     try {
         const {
@@ -15,13 +16,16 @@ exports.registerAlumno = async (req, res) => {
             telefono
         } = req.body;
 
-        console.log('📝 Registrando alumno:', { correo, primer_nombre, apellido_paterno });
+        // ============================================
+        // NORMALIZAR CORREO (minúsculas y sin espacios)
+        // ============================================
+        const correo_normalizado = correo.toLowerCase().trim();
 
         const pool = await getConnection();
 
         const existingUser = await pool.query(
             'SELECT * FROM usuario WHERE correo = $1',
-            [correo]
+            [correo_normalizado]
         );
 
         if (existingUser.rows.length > 0) {
@@ -39,7 +43,7 @@ exports.registerAlumno = async (req, res) => {
         const nombre_completo = nombreCompletoParts.join(' ');
         const hashedPassword = await bcrypt.hash(contrasena, 10);
 
-        // INSERT en usuario
+        // INSERT en usuario con correo normalizado
         const result = await pool.query(
             `INSERT INTO usuario 
             (primer_nombre, segundo_nombre, apellido_paterno, apellido_materno, 
@@ -48,20 +52,19 @@ exports.registerAlumno = async (req, res) => {
             VALUES ($1, $2, $3, $4, $5, $6, CURRENT_DATE, $7, $8, true, 'alumno', $9)
             RETURNING id_usuario`,
             [primer_nombre, segundo_nombre, apellido_paterno, apellido_materno,
-             correo, hashedPassword, fecha_nacimiento || null, telefono || null, nombre_completo]
+             correo_normalizado, hashedPassword, fecha_nacimiento || null, telefono || null, nombre_completo]
         );
 
         const id_usuario = result.rows[0].id_usuario;
-        console.log('✅ Usuario creado con ID:', id_usuario);
 
-        // INSERT en alumno (opcional, si falla no detiene el registro)
+        // Insert en alumno (opcional)
         try {
             await pool.query(`INSERT INTO alumnos (id_usuario) VALUES ($1)`, [id_usuario]);
-            console.log('✅ Alumno insertado en tabla alumnos');
+            console.log(`✅ Alumno insertado en tabla alumnos con id_usuario: ${id_usuario}`);
         } catch (err) {
             try {
                 await pool.query(`INSERT INTO alumno (id_usuario) VALUES ($1)`, [id_usuario]);
-                console.log('✅ Alumno insertado en tabla alumno');
+                console.log(`✅ Alumno insertado en tabla alumno con id_usuario: ${id_usuario}`);
             } catch (err2) {
                 console.log('⚠️ No se insertó en alumno:', err2.message);
             }
@@ -74,11 +77,12 @@ exports.registerAlumno = async (req, res) => {
         });
         
     } catch (error) {
-        console.error('❌ Error en registerAlumno:', error);
+        console.error('Error en registerAlumno:', error);
         res.status(500).json({ message: 'Error en el servidor', error: error.message });
     }
 };
 
+// Registro para administrativos
 exports.registerAdmin = async (req, res) => {
     try {
         const {
@@ -96,11 +100,16 @@ exports.registerAdmin = async (req, res) => {
             fecha_nacimiento
         } = req.body;
 
+        // ============================================
+        // NORMALIZAR CORREO (minúsculas y sin espacios)
+        // ============================================
+        const correo_normalizado = correo.toLowerCase().trim();
+
         const pool = await getConnection();
 
         const existingUser = await pool.query(
             'SELECT * FROM usuario WHERE correo = $1',
-            [correo]
+            [correo_normalizado]
         );
 
         if (existingUser.rows.length > 0) {
@@ -124,7 +133,7 @@ exports.registerAdmin = async (req, res) => {
             VALUES ($1, $2, $3, $4, $5, $6, $7, 'admin', $8, $9, $10, CURRENT_DATE, true)
             RETURNING id_usuario`,
             [primer_nombre, segundo_nombre, apellido_paterno, apellido_materno,
-             finalNombreCompleto, correo, hashedPassword, es_admin || true,
+             finalNombreCompleto, correo_normalizado, hashedPassword, es_admin || true,
              telefono || null, fecha_nacimiento || null]
         );
 
@@ -147,11 +156,17 @@ exports.registerAdmin = async (req, res) => {
     }
 };
 
+// LOGIN - buscar con correo normalizado
 exports.login = async (req, res) => {
     try {
         const { correo, contrasena } = req.body;
         
-        console.log('🔐 Login intentado para:', correo);
+        // ============================================
+        // NORMALIZAR CORREO (minúsculas y sin espacios)
+        // ============================================
+        const correo_normalizado = correo.toLowerCase().trim();
+        
+        console.log('🔐 Login intentado para:', correo_normalizado);
         
         const pool = await getConnection();
 
@@ -161,11 +176,11 @@ exports.login = async (req, res) => {
              FROM usuario u
              LEFT JOIN administrativa a ON u.id_usuario = a.id_usuario
              WHERE u.correo = $1 AND u.esta_activo = true`,
-            [correo]
+            [correo_normalizado]
         );
 
         if (result.rows.length === 0) {
-            console.log('❌ Usuario no encontrado:', correo);
+            console.log('❌ Usuario no encontrado:', correo_normalizado);
             return res.status(401).json({ message: 'Credenciales inválidas' });
         }
 
@@ -175,10 +190,11 @@ exports.login = async (req, res) => {
         const validPassword = await bcrypt.compare(contrasena, usuario.contrasena);
         
         if (!validPassword) {
-            console.log('❌ Contraseña incorrecta para:', correo);
+            console.log('❌ Contraseña incorrecta para:', correo_normalizado);
             return res.status(401).json({ message: 'Credenciales inválidas' });
         }
 
+        // Actualizar última conexión si es admin
         if (isAdmin) {
             await pool.query(
                 'UPDATE administrativa SET ultima_conexion = CURRENT_TIMESTAMP WHERE id_usuario = $1',
@@ -186,6 +202,7 @@ exports.login = async (req, res) => {
             );
         }
 
+        // Generar token
         const token = jwt.sign(
             { 
                 id: usuario.id_usuario,
@@ -197,6 +214,7 @@ exports.login = async (req, res) => {
             { expiresIn: '24h' }
         );
 
+        // Preparar respuesta
         let userResponse = {
             id: usuario.id_usuario,
             correo: usuario.correo,
