@@ -2,7 +2,7 @@ const { getConnection } = require('../config/database');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
-// Registro para alumnos - SOLO guarda en tabla usuario
+// Registro para alumnos - Guarda en usuario Y en alumnos
 exports.registerAlumno = async (req, res) => {
     try {
         const {
@@ -41,7 +41,9 @@ exports.registerAlumno = async (req, res) => {
         // Encriptar contraseña
         const hashedPassword = await bcrypt.hash(contrasena, 10);
 
-        // SOLO insertar en usuario (NADA en alumno)
+        // ============================================
+        // PRIMER INSERT: Tabla USUARIO
+        // ============================================
         const result = await pool.query(
             `INSERT INTO usuario 
             (primer_nombre, segundo_nombre, apellido_paterno, apellido_materno, 
@@ -56,10 +58,22 @@ exports.registerAlumno = async (req, res) => {
         const id_usuario = result.rows[0].id_usuario;
 
         // ============================================
-        // NO se inserta en alumno aquí
-        // El admin debe usar POST /admin/asignar-alumno
-        // para relacionar usuario con gestión
+        // SEGUNDO INSERT: Tabla ALUMNOS (solo id_usuario)
         // ============================================
+        try {
+            await pool.query(
+                `INSERT INTO alumnos (id_usuario) VALUES ($1)`,
+                [id_usuario]
+            );
+            console.log(`✅ Alumno insertado en tabla alumnos con id_usuario: ${id_usuario}`);
+        } catch (error) {
+            // Si la tabla se llama "alumno" sin s
+            await pool.query(
+                `INSERT INTO alumno (id_usuario) VALUES ($1)`,
+                [id_usuario]
+            );
+            console.log(`✅ Alumno insertado en tabla alumno con id_usuario: ${id_usuario}`);
+        }
 
         res.status(201).json({
             message: 'Usuario registrado exitosamente',
@@ -73,7 +87,7 @@ exports.registerAlumno = async (req, res) => {
     }
 };
 
-// Registro para administrativos - Guarda en usuario y administrativa
+// Registro para administrativos - Guarda en usuario Y en administrativa
 exports.registerAdmin = async (req, res) => {
     try {
         const {
@@ -104,7 +118,6 @@ exports.registerAdmin = async (req, res) => {
 
         const hashedPassword = await bcrypt.hash(contrasena, 10);
 
-        // Generar nombre_completo si no viene
         let finalNombreCompleto = nombre_completo;
         if (!finalNombreCompleto) {
             const parts = [primer_nombre, segundo_nombre, apellido_paterno, apellido_materno]
@@ -112,6 +125,9 @@ exports.registerAdmin = async (req, res) => {
             finalNombreCompleto = parts.join(' ');
         }
 
+        // ============================================
+        // PRIMER INSERT: Tabla USUARIO
+        // ============================================
         const userResult = await pool.query(
             `INSERT INTO usuario 
             (primer_nombre, segundo_nombre, apellido_paterno, apellido_materno,
@@ -126,7 +142,9 @@ exports.registerAdmin = async (req, res) => {
 
         const id_usuario = userResult.rows[0].id_usuario;
 
-        // Insertar en administrativa
+        // ============================================
+        // SEGUNDO INSERT: Tabla ADMINISTRATIVA
+        // ============================================
         await pool.query(
             `INSERT INTO administrativa 
             (id_usuario, ficha_inicio, ficha_fin, es_admin, ultima_conexion) 
