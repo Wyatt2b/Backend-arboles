@@ -2,7 +2,7 @@ const { getConnection } = require('../config/database');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
-// Registro para usuarios normales (Alumno) - CORREGIDO
+// Registro para usuarios normales (Alumno)
 exports.registerAlumno = async (req, res) => {
     try {
         const {
@@ -28,61 +28,23 @@ exports.registerAlumno = async (req, res) => {
             return res.status(400).json({ message: 'El correo ya está registrado' });
         }
 
-        // ============================================
-        // GENERAR NOMBRE_COMPLETO (concatenando los campos)
-        // ============================================
-        const nombreCompletoParts = [
-            primer_nombre,
-            segundo_nombre,
-            apellido_paterno,
-            apellido_materno
-        ].filter(part => part && part.trim() !== '');
-        
-        const nombre_completo = nombreCompletoParts.join(' ');
-
         // Encriptar contraseña
         const hashedPassword = await bcrypt.hash(contrasena, 10);
 
-        // Insertar usuario (AHORA CON NOMBRE_COMPLETO)
+        // Insertar usuario
         const result = await pool.query(
             `INSERT INTO usuario 
             (primer_nombre, segundo_nombre, apellido_paterno, apellido_materno, 
-             correo, contrasena, fecha_registro, fecha_nacimiento, telefono, 
-             esta_activo, tipo_usuario, nombre_completo) 
-            VALUES ($1, $2, $3, $4, $5, $6, CURRENT_DATE, $7, $8, true, 'alumno', $9)
+             correo, contrasena, fecha_registro, fecha_nacimiento, telefono, esta_activo, tipo_usuario) 
+            VALUES ($1, $2, $3, $4, $5, $6, CURRENT_DATE, $7, $8, true, 'alumno')
             RETURNING id_usuario`,
             [primer_nombre, segundo_nombre, apellido_paterno, apellido_materno,
-             correo, hashedPassword, fecha_nacimiento || null, telefono || null, nombre_completo]
+             correo, hashedPassword, fecha_nacimiento, telefono]
         );
-
-        const id_usuario = result.rows[0].id_usuario;
-
-        // ============================================
-        // INSERTAR EN TABLA ALUMNO (¡ESTO ES CRÍTICO!)
-        // ============================================
-        // Intenta primero con "alumnos" (plural), si falla usa "alumno" (singular)
-        try {
-            await pool.query(
-                `INSERT INTO alumnos (id_usuario, id_gestion) 
-                 VALUES ($1, $1)`,
-                [id_usuario]
-            );
-            console.log(`✅ Alumno insertado en tabla alumnos con id_usuario: ${id_usuario}`);
-        } catch (insertError) {
-            // Si falla con "alumnos", intentar con "alumno"
-            console.log('Intentando con tabla alumno...');
-            await pool.query(
-                `INSERT INTO alumno (id_usuario, id_gestion) 
-                 VALUES ($1, $1)`,
-                [id_usuario]
-            );
-            console.log(`✅ Alumno insertado en tabla alumno con id_usuario: ${id_usuario}`);
-        }
 
         res.status(201).json({
             message: 'Usuario registrado exitosamente',
-            id: id_usuario,
-            nombre_completo: nombre_completo
+            id: result.rows[0].id_usuario
         });
     } catch (error) {
         console.error('Error en registerAlumno:', error);
@@ -90,7 +52,7 @@ exports.registerAlumno = async (req, res) => {
     }
 };
 
-// Registro para administrativos (CORREGIDO - recibe campos separados)
+// Registro para administrativos
 exports.registerAdmin = async (req, res) => {
     try {
         const {
@@ -123,7 +85,7 @@ exports.registerAdmin = async (req, res) => {
         // Encriptar contraseña
         const hashedPassword = await bcrypt.hash(contrasena, 10);
 
-        // Insertar en usuario con TODOS los campos, incluyendo telefono y fecha_nacimiento
+        // Insertar en usuario
         const userResult = await pool.query(
             `INSERT INTO usuario 
             (primer_nombre, segundo_nombre, apellido_paterno, apellido_materno,
@@ -156,7 +118,7 @@ exports.registerAdmin = async (req, res) => {
     }
 };
 
-// Login unificado (MODIFICADO)
+// Login unificado
 exports.login = async (req, res) => {
     try {
         const { correo, contrasena } = req.body;
