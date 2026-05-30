@@ -1,6 +1,7 @@
 const { getConnection } = require('../config/database');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer'); // <-- LIBRERÍA AGREGADA
 
 // REGISTRO - guarda correo en minúsculas
 exports.registerAlumno = async (req, res) => {
@@ -239,6 +240,85 @@ exports.login = async (req, res) => {
         
     } catch (error) {
         console.error('❌ Error en login:', error);
+        res.status(500).json({ message: 'Error en el servidor', error: error.message });
+    }
+};
+
+// =========================================================
+// NUEVAS FUNCIONES PARA RECUPERAR CONTRASEÑA
+// =========================================================
+
+// Configuración del enviador de correos
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: process.env.EMAIL_USER, 
+        pass: process.env.EMAIL_PASS  
+    }
+});
+
+// Solicitar código
+exports.solicitarCodigo = async (req, res) => {
+    try {
+        const { correo } = req.body;
+        const correo_normalizado = correo.toLowerCase().trim();
+        const pool = await getConnection();
+
+        const user = await pool.query('SELECT * FROM usuario WHERE correo = $1', [correo_normalizado]);
+        if (user.rows.length === 0) {
+            return res.status(404).json({ message: 'Usuario no encontrado' });
+        }
+
+        const codigo = Math.floor(100000 + Math.random() * 900000).toString();
+
+        await pool.query(
+            `UPDATE usuario SET codigo_recuperacion = $1, expiracion_codigo = CURRENT_TIMESTAMP + INTERVAL '15 minutes' WHERE correo = $2`,
+            [codigo, correo_normalizado]
+        );
+
+        const mailOptions = {
+            from: process.env.EMAIL_USER,
+            to: correo_normalizado,
+            subject: 'Código de recuperación - Mis Árboles',
+            text: `Tu código para restablecer la contraseña es: ${codigo}. Este código expira en 15 minutos.`
+        };
+
+        await transporter.sendMail(mailOptions);
+        res.json({ message: 'Código enviado exitosamente al correo' });
+
+    } catch (error) {
+        console.error('Error al solicitar código:', error);
+        res.status(500).json({ message: 'Error interno', error: error.message });
+    }
+};
+
+// Validar y restablecer
+exports.restablecerPassword = async (req, res) => {
+    try {
+        const { correo, codigo, nueva_contrasena } = req.body;
+        const correo_normalizado = correo.toLowerCase().trim();
+        const pool = await getConnection();
+
+        const user = await pool.query(
+            `SELECT * FROM usuario WHERE correo = $1 AND codigo_recuperacion = $2 AND expiracion_codigo > CURRENT_TIMESTAMP`,
+            [correo_normalizado, codigo]
+        );
+
+        if (user.rows.length === 0) {
+            return res.status(400).json({ message: 'El código es inválido o ya expiró' });
+        }
+
+        const hashedPassword = await bcrypt.hash(nueva_contrasena, 10);
+
+        await pool.query(
+            `UPDATE usuario SET contrasena = $1, codigo_recuperacion = NULL, expiracion_codigo = NULL WHERE correo = $2`,
+            [hashedPassword, correo_normalizado]
+        );
+
+        res.json({ message: 'Contraseña actualizada exitosamente' });
+
+    } catch (error) {
+        console.error('Error al restablecer contraseña:', error);
         res.status(500).json({ message: 'Error en el servidor', error: error.message });
     }
 };
