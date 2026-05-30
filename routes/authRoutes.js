@@ -1,17 +1,19 @@
 const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
+const { verifyToken } = require('../middlewares/authMiddleware');
 
-// Rutas que ya funcionaban
+// Rutas de registro y login
 router.post('/register/alumno', authController.registerAlumno);
 router.post('/register/admin', authController.registerAdmin);
 router.post('/login', authController.login);
 
-// ============================================
-// ESTO ES LO QUE LE FALTA A TU CÓDIGO 
-// (Sin esto, la app no puede pedir correos)
-// ============================================
-router.post('/solicitar-codigo', authController.solicitarCodigo);
-router.post('/restablecer-password', authController.restablecerPassword);
+// =============================================
+// RUTAS PARA RECUPERACIÓN DE CONTRASEÑA (NUEVAS)
+// =============================================
+router.post('/solicitar-recuperacion', authController.solicitarRecuperacion);
+router.post('/verificar-codigo', authController.verificarCodigo);
+router.post('/cambiar-contrasena-codigo', authController.cambiarContrasenaConCodigo);
+router.post('/cambiar-contrasena', verifyToken, authController.cambiarContrasenaAutenticado);
 
 module.exports = router;

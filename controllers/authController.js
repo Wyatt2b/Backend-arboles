@@ -1,7 +1,6 @@
 const { getConnection } = require('../config/database');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const nodemailer = require('nodemailer'); // <-- LIBRERÍA AGREGADA
 
 // REGISTRO - guarda correo en minúsculas
 exports.registerAlumno = async (req, res) => {
@@ -244,81 +243,176 @@ exports.login = async (req, res) => {
     }
 };
 
-// =========================================================
-// NUEVAS FUNCIONES PARA RECUPERAR CONTRASEÑA
-// =========================================================
+// =============================================
+// RECUPERACIÓN DE CONTRASEÑA (NUEVOS MÉTODOS)
+// =============================================
 
-// Configuración del enviador de correos
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: process.env.EMAIL_USER, 
-        pass: process.env.EMAIL_PASS  
-    }
-});
-
-// Solicitar código
-exports.solicitarCodigo = async (req, res) => {
+// PASO 1: Solicitar código de recuperación
+exports.solicitarRecuperacion = async (req, res) => {
     try {
         const { correo } = req.body;
-        const correo_normalizado = correo.toLowerCase().trim();
         const pool = await getConnection();
 
-        const user = await pool.query('SELECT * FROM usuario WHERE correo = $1', [correo_normalizado]);
-        if (user.rows.length === 0) {
-            return res.status(404).json({ message: 'Usuario no encontrado' });
+        // Normalizar correo
+        const correo_normalizado = correo.toLowerCase().trim();
+
+        // Verificar si el usuario existe
+        const userResult = await pool.query(
+            'SELECT id_usuario, correo FROM usuario WHERE correo = $1 AND esta_activo = true',
+            [correo_normalizado]
+        );
+
+        if (userResult.rows.length === 0) {
+            // Por seguridad, no revelamos si el correo existe o no
+            return res.status(200).json({ 
+                message: 'Si el correo existe, se enviará un código de recuperación' 
+            });
         }
 
+        // Generar código de 6 dígitos
         const codigo = Math.floor(100000 + Math.random() * 900000).toString();
-
+        
+        // Guardar código en la base de datos (expira en 15 minutos)
         await pool.query(
-            `UPDATE usuario SET codigo_recuperacion = $1, expiracion_codigo = CURRENT_TIMESTAMP + INTERVAL '15 minutes' WHERE correo = $2`,
+            `UPDATE usuario 
+             SET codigo_recuperacion = $1, 
+                 expiracion_codigo = NOW() + INTERVAL '15 minutes'
+             WHERE correo = $2`,
             [codigo, correo_normalizado]
         );
 
-        const mailOptions = {
-            from: process.env.EMAIL_USER,
-            to: correo_normalizado,
-            subject: 'Código de recuperación - Mis Árboles',
-            text: `Tu código para restablecer la contraseña es: ${codigo}. Este código expira en 15 minutos.`
-        };
+        // Aquí enviarías el código por correo electrónico
+        // Por ahora lo devolvemos en la respuesta (solo para pruebas)
+        console.log(`📧 Código de recuperación para ${correo_normalizado}: ${codigo}`);
 
-        await transporter.sendMail(mailOptions);
-        res.json({ message: 'Código enviado exitosamente al correo' });
-
+        res.status(200).json({ 
+            message: 'Código de recuperación enviado',
+            codigo: process.env.NODE_ENV === 'development' ? codigo : undefined
+        });
     } catch (error) {
-        console.error('Error al solicitar código:', error);
-        res.status(500).json({ message: 'Error interno', error: error.message });
+        console.error('Error en solicitarRecuperacion:', error);
+        res.status(500).json({ message: 'Error al solicitar recuperación', error: error.message });
     }
 };
 
-// Validar y restablecer
-exports.restablecerPassword = async (req, res) => {
+// PASO 2: Verificar código de recuperación
+exports.verificarCodigo = async (req, res) => {
     try {
-        const { correo, codigo, nueva_contrasena } = req.body;
-        const correo_normalizado = correo.toLowerCase().trim();
+        const { correo, codigo } = req.body;
         const pool = await getConnection();
 
-        const user = await pool.query(
-            `SELECT * FROM usuario WHERE correo = $1 AND codigo_recuperacion = $2 AND expiracion_codigo > CURRENT_TIMESTAMP`,
+        const correo_normalizado = correo.toLowerCase().trim();
+
+        const userResult = await pool.query(
+            `SELECT id_usuario FROM usuario 
+             WHERE correo = $1 
+               AND codigo_recuperacion = $2 
+               AND expiracion_codigo > NOW()
+               AND esta_activo = true`,
             [correo_normalizado, codigo]
         );
 
-        if (user.rows.length === 0) {
-            return res.status(400).json({ message: 'El código es inválido o ya expiró' });
+        if (userResult.rows.length === 0) {
+            return res.status(400).json({ message: 'Código inválido o expirado' });
         }
 
+        res.status(200).json({ 
+            message: 'Código válido',
+            id_usuario: userResult.rows[0].id_usuario
+        });
+    } catch (error) {
+        console.error('Error en verificarCodigo:', error);
+        res.status(500).json({ message: 'Error al verificar código', error: error.message });
+    }
+};
+
+// PASO 3: Cambiar contraseña usando código de recuperación
+exports.cambiarContrasenaConCodigo = async (req, res) => {
+    try {
+        const { correo, codigo, nueva_contrasena } = req.body;
+        const pool = await getConnection();
+
+        const correo_normalizado = correo.toLowerCase().trim();
+
+        // Verificar código
+        const userResult = await pool.query(
+            `SELECT id_usuario FROM usuario 
+             WHERE correo = $1 
+               AND codigo_recuperacion = $2 
+               AND expiracion_codigo > NOW()
+               AND esta_activo = true`,
+            [correo_normalizado, codigo]
+        );
+
+        if (userResult.rows.length === 0) {
+            return res.status(400).json({ message: 'Código inválido o expirado' });
+        }
+
+        // Validar nueva contraseña
+        if (!nueva_contrasena || nueva_contrasena.length < 6) {
+            return res.status(400).json({ message: 'La contraseña debe tener al menos 6 caracteres' });
+        }
+
+        // Encriptar nueva contraseña
         const hashedPassword = await bcrypt.hash(nueva_contrasena, 10);
 
+        // Actualizar contraseña y limpiar código de recuperación
         await pool.query(
-            `UPDATE usuario SET contrasena = $1, codigo_recuperacion = NULL, expiracion_codigo = NULL WHERE correo = $2`,
+            `UPDATE usuario 
+             SET contrasena = $1,
+                 codigo_recuperacion = NULL,
+                 expiracion_codigo = NULL
+             WHERE correo = $2`,
             [hashedPassword, correo_normalizado]
         );
 
-        res.json({ message: 'Contraseña actualizada exitosamente' });
-
+        res.status(200).json({ message: 'Contraseña actualizada exitosamente' });
     } catch (error) {
-        console.error('Error al restablecer contraseña:', error);
-        res.status(500).json({ message: 'Error en el servidor', error: error.message });
+        console.error('Error en cambiarContrasenaConCodigo:', error);
+        res.status(500).json({ message: 'Error al cambiar contraseña', error: error.message });
+    }
+};
+
+// PASO 4: Cambiar contraseña (usuario autenticado - para perfil)
+exports.cambiarContrasenaAutenticado = async (req, res) => {
+    try {
+        const { contrasena_actual, nueva_contrasena } = req.body;
+        const userId = req.userId;
+        const pool = await getConnection();
+
+        // Obtener usuario actual
+        const userResult = await pool.query(
+            'SELECT contrasena FROM usuario WHERE id_usuario = $1 AND esta_activo = true',
+            [userId]
+        );
+
+        if (userResult.rows.length === 0) {
+            return res.status(404).json({ message: 'Usuario no encontrado' });
+        }
+
+        // Verificar contraseña actual
+        const validPassword = await bcrypt.compare(contrasena_actual, userResult.rows[0].contrasena);
+        if (!validPassword) {
+            return res.status(401).json({ message: 'Contraseña actual incorrecta' });
+        }
+
+        // Validar nueva contraseña
+        if (!nueva_contrasena || nueva_contrasena.length < 6) {
+            return res.status(400).json({ message: 'La nueva contraseña debe tener al menos 6 caracteres' });
+        }
+
+        // Encriptar nueva contraseña
+        const hashedPassword = await bcrypt.hash(nueva_contrasena, 10);
+
+        // Actualizar contraseña
+        await pool.query(
+            'UPDATE usuario SET contrasena = $1 WHERE id_usuario = $2',
+            [hashedPassword, userId]
+        );
+
+        res.status(200).json({ message: 'Contraseña actualizada exitosamente' });
+    } catch (error) {
+        console.error('Error en cambiarContrasenaAutenticado:', error);
+        res.status(500).json({ message: 'Error al cambiar contraseña', error: error.message });
     }
 };
