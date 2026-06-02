@@ -229,7 +229,7 @@ exports.createCampania = async (req, res) => {
     }
 };
 
-// GET: Obtener todos los árboles
+// GET: Obtener todos los árboles (admin) - CON VALOR ÉTICO
 exports.getAllArboles = async (req, res) => {
     try {
         const pool = await getConnection();
@@ -240,13 +240,13 @@ exports.getAllArboles = async (req, res) => {
                    a.url_imagen, a.imagen_descripcion,
                    e.nombre_comun, e.nombre_cientifico,
                    u.calle, u.colonia, u.numero, u.estado, u.coordenadas,
-                   v.altura_actual, v.diametro_actual, v.estado_actual,
-                   g.nombre_escuela
+                   g.nombre_escuela,
+                   v.valor_etico
             FROM arbol a
             JOIN especie e ON a.id_especie = e.id
             JOIN gestion g ON a.id_gestion = g.id
             LEFT JOIN ubicacion u ON a.id_arbol = u.id_arbol
-            LEFT JOIN valor v ON a.id_arbol = v.id_arbol AND v.esta_activo = true
+            LEFT JOIN valor v ON a.id_valor = v.id_valor
             ORDER BY a.id_arbol DESC
         `);
         
