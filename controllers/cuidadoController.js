@@ -53,23 +53,62 @@ exports.getCuidadoDetalle = async (req, res) => {
     }
 };
 
-// POST: Registrar nuevo cuidado
+// POST: Registrar nuevo cuidado (con validaciones)
 exports.createCuidado = async (req, res) => {
     try {
-        const { id } = req.params;
-        const { id_cuidado, fecha, comentario } = req.body;
+        const { id } = req.params; // id del árbol
+        const { id_servicio, comentario, fecha } = req.body;
+        
         const pool = await getConnection();
 
+        // Validar que el árbol existe
+        const arbolExistente = await pool.query(
+            'SELECT id_arbol FROM arbol WHERE id_arbol = $1',
+            [id]
+        );
+
+        if (arbolExistente.rows.length === 0) {
+            return res.status(404).json({ message: 'Árbol no encontrado' });
+        }
+
+        // Validar que el servicio existe
+        const servicioExistente = await pool.query(
+            'SELECT id FROM servicio WHERE id = $1',
+            [id_servicio]
+        );
+
+        if (servicioExistente.rows.length === 0) {
+            return res.status(404).json({ message: 'Servicio no encontrado' });
+        }
+
+        // PASO 1: Insertar en tabla cuidado (catálogo)
+        const cuidadoResult = await pool.query(
+            `INSERT INTO cuidado (id_servicio, descripcion, ficha_inicio) 
+             VALUES ($1, $2, $3)
+             RETURNING id_cuidado`,
+            [id_servicio, comentario, fecha || new Date()]
+        );
+
+        const id_cuidado = cuidadoResult.rows[0].id_cuidado;
+
+        // PASO 2: Insertar en tabla arbol_cuidados (relación árbol-cuidado)
         await pool.query(
             `INSERT INTO arbol_cuidados (id_arbol, id_cuidado, fecha, comentario) 
-            VALUES ($1, $2, $3, $4)`,
+             VALUES ($1, $2, $3, $4)`,
             [id, id_cuidado, fecha || new Date(), comentario]
         );
 
-        res.status(201).json({ message: 'Cuidado registrado exitosamente' });
+        res.status(201).json({ 
+            message: 'Cuidado registrado exitosamente',
+            id_cuidado: id_cuidado,
+            id_arbol: id
+        });
     } catch (error) {
         console.error('Error en createCuidado:', error);
-        res.status(500).json({ message: 'Error al registrar cuidado', error: error.message });
+        res.status(500).json({ 
+            message: 'Error al registrar cuidado', 
+            error: error.message 
+        });
     }
 };
 
